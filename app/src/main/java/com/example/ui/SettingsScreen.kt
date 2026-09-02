@@ -459,6 +459,35 @@ fun SettingsScreen(
                     }
                 }
             }
+            
+            // Section: Footer
+            item {
+                Spacer(modifier = Modifier.height(32.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val packageInfo = try {
+                        context.packageManager.getPackageInfo(context.packageName, 0)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    val versionName = packageInfo?.versionName ?: "1.0.0"
+                    
+                    Text(
+                        text = "Version: $versionName",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "© 2026 Shamim : All Rights Reserved",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
         }
     }
 }

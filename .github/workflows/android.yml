@@ -22,14 +22,14 @@ jobs:
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '9.3.1'
 
     - name: Decode Keystore
-      run: base64 -d debug.keystore.base64 > debug.keystore
+      run: base64 -di debug.keystore.base64 > debug.keystore
 
     - name: Build with Gradle
-      run: |
-        chmod +x ./gradlew
-        ./gradlew assembleDebug
+      run: gradle assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
