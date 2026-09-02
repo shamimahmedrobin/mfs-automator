@@ -25,11 +25,24 @@ jobs:
       with:
         gradle-version: '9.3.1'
 
-    - name: Decode Keystore
-      run: base64 -di debug.keystore.base64 > debug.keystore
+    - name: Prepare Keystore
+      run: |
+        if [ -f debug.keystore.base64 ]; then
+          echo "Decoding existing keystore..."
+          base64 -d debug.keystore.base64 > debug.keystore
+        else
+          echo "Generating new debug keystore..."
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        fi
 
     - name: Build with Gradle
-      run: gradle assembleDebug
+      run: |
+        if [ -f gradlew ]; then
+          chmod +x gradlew
+          ./gradlew assembleDebug
+        else
+          gradle assembleDebug
+        fi
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
