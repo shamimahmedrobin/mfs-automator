@@ -41,4 +41,16 @@ class ExampleUnitTest {
     assertEquals("240902123456", result?.trxId)
     assertEquals("017123456789", result?.senderNumber)
   }
+
+  @Test
+  fun testRocket16216WithBkashMention() {
+    val sender = "16216"
+    val body = "You have received Tk 250.00 from bKash A/C: 01887353914. TxnId: 9876543210. Balance: Tk 2,500.00"
+    val result = SmsParser.parseMessage(sender, body)
+    assertNotNull(result)
+    assertEquals("Rocket", result?.mfsName)
+    assertEquals("250.00", result?.amount)
+    assertEquals("9876543210", result?.trxId)
+    assertEquals("01887353914", result?.senderNumber)
+  }
 }

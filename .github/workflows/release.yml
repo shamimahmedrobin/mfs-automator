@@ -23,13 +23,20 @@ jobs:
       - name: Make Gradle Wrapper Executable
         run: chmod +x ./gradlew
 
+      - name: Prepare Keystore
+        run: |
+          if [ -f debug.keystore.base64 ]; then
+            echo "Decoding repository keystore..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+
       - name: Build Release APK
         run: ./gradlew assembleRelease
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: app/build/outputs/apk/release/app-release-unsigned.apk
+          files: app/build/outputs/apk/release/*.apk
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false

@@ -31,14 +31,32 @@ object WebhookClient {
         customHeader: String = ""
     ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
         try {
+            val cleanAmountStr = transaction.amount.replace(",", "").trim()
+            val numericAmount: Number? = cleanAmountStr.toDoubleOrNull()?.let {
+                if (it % 1.0 == 0.0) it.toLong() else it
+            }
+
+            val last4 = if (transaction.senderNumber.length >= 4) {
+                transaction.senderNumber.takeLast(4)
+            } else {
+                transaction.senderNumber
+            }
+
+            val activeDeviceId = if (deviceId.isNotBlank()) deviceId else (transaction.deviceId ?: "")
+
             val jsonObject = JSONObject().apply {
-                put("mfsName", transaction.mfsName)
-                put("amount", transaction.amount)
-                put("senderNumber", transaction.senderNumber)
-                put("trxId", transaction.trxId)
+                put("provider", transaction.mfsName)
+                put("trx_id", transaction.trxId)
+                if (numericAmount != null) {
+                    put("amount", numericAmount)
+                } else {
+                    put("amount", cleanAmountStr)
+                }
+                put("sender", transaction.senderNumber)
+                put("sender_last4", last4)
                 put("timestamp", transaction.timestamp)
-                if (transaction.currentBalance != null) put("currentBalance", transaction.currentBalance)
-                if (deviceId.isNotBlank()) put("deviceId", deviceId)
+                put("device_id", activeDeviceId)
+                put("raw_sms", transaction.body)
             }
 
             val requestBody = jsonObject.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
