@@ -22,6 +22,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    fun scanInbox(hoursBack: Int = 72, onComplete: ((Int) -> Unit)? = null) {
+        viewModelScope.launch {
+            val count = com.example.sms.SmsInboxScanner.scanRecentSms(getApplication(), hoursBack)
+            onComplete?.invoke(count)
+        }
+    }
         
     fun clearHistory() {
         viewModelScope.launch {

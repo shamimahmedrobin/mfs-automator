@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +41,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    
+    BackHandler(onBack = onBackClick)
     
     // States from DataStore
     val appTitle by viewModel.settings.appTitle.collectAsState(initial = "MFS Automator")
@@ -387,12 +391,32 @@ fun SettingsScreen(
                                 intent.action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
                                 intent.data = Uri.parse("package:${context.packageName}")
                                 context.startActivity(intent)
+                            } else {
+                                Toast.makeText(context, "Battery Optimization is already disabled (Unrestricted)", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Ignore Battery Optimization")
+                        Text("Disable Battery Optimization")
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            com.example.service.MfsForegroundService.startService(context)
+                            Toast.makeText(context, "MFS Background Service Active (24/7)", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("🟢 Restart 24/7 Background Service")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Tip: For Xiaomi (MIUI/HyperOS), Vivo & Oppo, enable 'Auto-start' and set Battery Saver to 'No restrictions' in App Info so the system never stops the SMS listener.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -400,6 +424,35 @@ fun SettingsScreen(
             item {
                 SettingsSectionTitle("DATA & STORAGE")
                 SettingsCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                Toast.makeText(context, "Scanning inbox for recent MFS SMS...", Toast.LENGTH_SHORT).show()
+                                viewModel.scanInbox(hoursBack = 72) { count ->
+                                    Toast.makeText(
+                                        context,
+                                        if (count > 0) "Found and imported $count new transaction(s)!"
+                                        else "Scan complete. All MFS transactions are up to date.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("Scan SMS Inbox", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge)
+                            Text("Import any missed bKash, Nagad, Rocket SMS", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

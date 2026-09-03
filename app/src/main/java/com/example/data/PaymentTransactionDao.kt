@@ -14,8 +14,11 @@ interface PaymentTransactionDao {
     @Query("SELECT * FROM payment_transactions WHERE isSynced = 0 ORDER BY timestamp ASC")
     suspend fun getAllUnsyncedTransactions(): List<PaymentTransaction>
 
+    @Query("SELECT * FROM payment_transactions WHERE trxId = :trxId LIMIT 1")
+    suspend fun getTransactionByTrxId(trxId: String): PaymentTransaction?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTransaction(transaction: PaymentTransaction)
+    suspend fun insertTransaction(transaction: PaymentTransaction): Long
     
     @Query("UPDATE payment_transactions SET isSynced = 1 WHERE id = :id")
     suspend fun markAsSynced(id: Int)

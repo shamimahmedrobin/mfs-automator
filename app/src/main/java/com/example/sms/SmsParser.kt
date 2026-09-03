@@ -37,45 +37,61 @@ object SmsParser {
 
     private fun determineMfsName(sender: String, body: String): String? {
         val lowerSender = sender.lowercase()
+        val lowerBody = body.lowercase()
         return when {
-            lowerSender.contains("bkash") -> "bKash"
-            lowerSender.contains("nagad") -> "Nagad"
-            lowerSender.contains("16216") -> "Rocket" // Rocket uses 16216
-            lowerSender.contains("upay") -> "Upay"
+            lowerSender.contains("bkash") || lowerSender.contains("16247") || lowerBody.contains("bkash") -> "bKash"
+            lowerSender.contains("nagad") || lowerSender.contains("16167") || lowerBody.contains("nagad") -> "Nagad"
+            lowerSender.contains("16216") || lowerSender.contains("rocket") || lowerSender.contains("dbbl") || 
+                lowerBody.contains("16216") || lowerBody.contains("rocket") || lowerBody.contains("dbbl") -> "Rocket"
+            lowerSender.contains("upay") || lowerSender.contains("16268") || lowerBody.contains("upay") -> "Upay"
             else -> null
         }
     }
 
     private fun extractAmount(body: String): String? {
-        // More robust BD MFS amount extraction
-        val regex = Regex("(?i)(?:Tk|BDT|Amount|Received)[:\\s]*([0-9,.]+)")
-        val matchResult = regex.find(body)
-        return matchResult?.groupValues?.get(1)?.replace(",", "")
+        // 1. Primary: matches "received Tk 50", "Cash In Tk 500", "deposit of Tk 50", "payment Tk 100"
+        val primaryRegex = Regex("(?i)(?:received|deposit of|cash in|payment of|payment)[\\s:]+(?:deposit of[\\s:]+)?(?:Tk\\.?|BDT)?[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+        val primaryMatch = primaryRegex.find(body)
+        if (primaryMatch != null) {
+            return primaryMatch.groupValues[1].replace(",", "")
+        }
+
+        // 2. Secondary: matches "Tk. 500", "Tk 500.00", "BDT 500"
+        val secondaryRegex = Regex("(?i)(?:Tk\\.?|BDT)[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+        val secondaryMatch = secondaryRegex.find(body)
+        if (secondaryMatch != null) {
+            return secondaryMatch.groupValues[1].replace(",", "")
+        }
+
+        // 3. Tertiary: matches "Amount: 500"
+        val tertiaryRegex = Regex("(?i)Amount[\\s:]*(?:Tk\\.?|BDT)?[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+        val tertiaryMatch = tertiaryRegex.find(body)
+        return tertiaryMatch?.groupValues?.get(1)?.replace(",", "")
     }
 
     private fun extractTrxId(body: String): String? {
-        // Matches TrxID 9J52GHI7, TrxId: 9J52GHI7, TxnId: etc.
-        val regex = Regex("(?i)(?:TrxI[dD]?|TxnId)[:\\s]*([A-Za-z0-9]+)")
+        // Matches TrxID 75XCY7X1, Trx ID: 75XCY7X1, TxnId: 12345, Txn ID: 12345, Transaction ID: etc.
+        val regex = Regex("(?i)(?:Trx\\s*ID|Txn\\s*ID|Transaction\\s*ID|Trans\\s*ID|TxID|TrxId|TxnId)[\\s:]*([A-Za-z0-9]+)")
         val matchResult = regex.find(body)
         return matchResult?.groupValues?.get(1)
     }
 
     private fun extractSenderNumber(body: String): String? {
-        // Matches 11 digit numbers following 'from' or 'Sender' or simply any 11 digit number
-        val regex = Regex("(?i)(?:from|Sender)[:\\s]*([0-9]{11})")
+        // 1. Matches 'from 018...', 'from A/C: 017...', 'Sender: 017...'
+        val regex = Regex("(?i)(?:from(?:\\s*A/C)?[\\s:]*|sender[\\s:]*)(\\+?8801[3-9][0-9]{8,9}|01[3-9][0-9]{8,9})")
         val matchResult = regex.find(body)
         if (matchResult != null) {
             return matchResult.groupValues[1]
         }
         
-        // Fallback: look for any 11-digit number that starts with 01
-        val fallbackRegex = Regex("(01[3-9][0-9]{8})")
+        // 2. Fallback: look for any BD 11-12 digit mobile or Rocket account number
+        val fallbackRegex = Regex("(\\+?8801[3-9][0-9]{8,9}|01[3-9][0-9]{8,9})")
         return fallbackRegex.find(body)?.groupValues?.get(1)
     }
 
     private fun extractBalance(body: String): String? {
-        // Matches Balance Tk 1500.50, Balance: BDT 500 etc.
-        val regex = Regex("(?i)Balance[\\s:]*(?:Tk|BDT)?[\\s:]*([0-9,.]+)")
+        // Matches Balance Tk 1500.50, Balance: BDT 500, Balance: 500.00 etc.
+        val regex = Regex("(?i)Balance[\\s:]*(?:Tk\\.?|BDT)?[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
         val matchResult = regex.find(body)
         return matchResult?.groupValues?.get(1)?.replace(",", "")
     }

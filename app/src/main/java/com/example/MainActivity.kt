@@ -4,9 +4,12 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,6 +72,7 @@ class MainActivity : FragmentActivity() {
     ) { permissions ->
         // Handle permission responses if needed
         checkBatteryOptimization()
+        com.example.service.MfsForegroundService.startService(this@MainActivity)
     }
 
     private fun checkBatteryOptimization() {
@@ -88,6 +92,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         
         checkAndRequestPermissions()
+        com.example.service.MfsForegroundService.startService(this)
 
         // Schedule background auto-retry for unsynced transactions (every 15 mins)
         val workRequest = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES).build()
@@ -106,7 +111,32 @@ class MainActivity : FragmentActivity() {
 
             MyApplicationTheme(darkTheme = isDarkTheme) {
                 val transactions by viewModel.transactions.collectAsState()
-                var currentScreen by remember { mutableStateOf("dashboard") }
+                var currentScreen by remember { mutableStateOf("dashboard") } // "dashboard", "history", "settings"
+                var lastBackPressTime by remember { mutableLongStateOf(0L) }
+                val context = LocalContext.current
+
+                // Handle Back button navigation
+                BackHandler {
+                    when (currentScreen) {
+                        "settings" -> {
+                            currentScreen = "dashboard"
+                        }
+                        "history" -> {
+                            currentScreen = "dashboard"
+                        }
+                        else -> {
+                            // On Home/Dashboard screen: Double back press to exit
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastBackPressTime < 2000L) {
+                                (context as? android.app.Activity)?.finish()
+                            } else {
+                                lastBackPressTime = currentTime
+                                Toast.makeText(context, "Press back button again to exit.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+
                 val appLockEnabled by viewModel.settings.appLockEnabled.collectAsState(initial = false)
                 val appPin by viewModel.settings.appPin.collectAsState(initial = "")
                 val appTitle by viewModel.settings.appTitle.collectAsState(initial = "MFS Automator")
@@ -119,6 +149,7 @@ class MainActivity : FragmentActivity() {
                 
                 LaunchedEffect(Unit) {
                     updateInfo = updateManager.checkForUpdate()
+                    viewModel.scanInbox(hoursBack = 48)
                 }
 
                 if (updateInfo != null) {
@@ -262,6 +293,8 @@ class MainActivity : FragmentActivity() {
                             transactions = transactions,
                             appTitle = appTitle,
                             isWebhookLive = isWebhookLive,
+                            currentTab = if (currentScreen == "history") "history" else "dashboard",
+                            onTabChange = { tab -> currentScreen = tab },
                             onSettingsClick = { currentScreen = "settings" },
                             onRetryClick = { transaction -> viewModel.retrySync(transaction) },
                             modifier = Modifier.padding(innerPadding)
@@ -301,13 +334,14 @@ fun DashboardScreen(
     transactions: List<PaymentTransaction>, 
     appTitle: String,
     isWebhookLive: Boolean,
+    currentTab: String = "dashboard",
+    onTabChange: (String) -> Unit = {},
     onSettingsClick: () -> Unit, 
     onRetryClick: (PaymentTransaction) -> Unit, 
     modifier: Modifier = Modifier
 ) {
     val totalAmount = transactions.sumOf { it.amount.replace(",", "").toDoubleOrNull() ?: 0.0 }
     val syncedCount = transactions.count { it.isSynced }
-    var currentTab by remember { mutableStateOf("dashboard") }
 
     var timeFilter by remember { mutableStateOf("All") }
     var statusFilter by remember { mutableStateOf("All") }
@@ -588,7 +622,7 @@ fun DashboardScreen(
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { currentTab = "dashboard" }
+                modifier = Modifier.clickable { onTabChange("dashboard") }
             ) {
                 Box(
                     modifier = Modifier
@@ -612,7 +646,7 @@ fun DashboardScreen(
             }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { currentTab = "history" }
+                modifier = Modifier.clickable { onTabChange("history") }
             ) {
                 Box(
                     modifier = Modifier
