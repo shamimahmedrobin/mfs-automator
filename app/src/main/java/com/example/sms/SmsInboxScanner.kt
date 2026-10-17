@@ -58,9 +58,18 @@ object SmsInboxScanner {
                     val amountDouble = parsedData.amount.replace(",", "").toDoubleOrNull() ?: 0.0
                     if (!isEnabled || amountDouble < minAmountSetting) continue
 
-                    // Check if already in DB
+                    // Check if already in DB (trxId normalized in SmsParser)
                     val existing = dao.getTransactionByTrxId(parsedData.trxId)
                     if (existing == null) {
+                        val (isSuspicious, suspicionReason) = BalanceCheck.evaluate(
+                            dao,
+                            parsedData.mfsName,
+                            parsedData.amount,
+                            parsedData.direction,
+                            parsedData.fee,
+                            parsedData.currentBalance,
+                            date
+                        )
                         val transaction = PaymentTransaction(
                             mfsName = parsedData.mfsName,
                             amount = parsedData.amount,
@@ -71,7 +80,11 @@ object SmsInboxScanner {
                             currentBalance = parsedData.currentBalance,
                             deviceId = deviceId,
                             isSynced = false,
-                            errorLog = "Pending sync"
+                            errorLog = "Pending sync",
+                            isSuspicious = isSuspicious,
+                            suspicionReason = suspicionReason,
+                            direction = parsedData.direction,
+                            fee = parsedData.fee
                         )
                         dao.insertTransaction(transaction)
                         importedCount++

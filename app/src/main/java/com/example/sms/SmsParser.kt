@@ -10,29 +10,90 @@ object SmsParser {
         val amount: String,
         val senderNumber: String,
         val trxId: String,
-        val currentBalance: String? = null
+        val currentBalance: String? = null,
+        // "in" = money received (customer payment), "out" = money withdrawn/spent
+        // (cash out, send money, merchant payment). Outgoing legs keep the
+        // balance chain continuous when the owner withdraws funds.
+        val direction: String = "in",
+        // Fee/charge shown on withdrawal SMS, e.g. "Fee Tk 9.25"
+        val fee: String? = null
     )
 
     fun parseMessage(sender: String, body: String): ParsedMfsData? {
-        val mfsName = determineMfsName(sender, body) ?: return null
+        // Normalize Bengali digits (০-৯) to English so amount/TrxID regexes work
+        // on Bangla SMS text as well.
+        val normalizedBody = normalizeDigits(body)
+        val mfsName = determineMfsName(sender, normalizedBody) ?: return null
 
-        val amount = extractAmount(body)
-        val trxId = extractTrxId(body)
-        val senderNumber = extractSenderNumber(body) ?: sender
-        val currentBalance = extractBalance(body)
+        val amount = extractAmount(normalizedBody)
+        val trxId = extractTrxId(normalizedBody)
+        val senderNumber = extractSenderNumber(normalizedBody) ?: sender
+        val currentBalance = extractBalance(normalizedBody)
+        val direction = detectDirection(normalizedBody)
+        val fee = if (direction == "out") extractFee(normalizedBody) else null
 
         if (amount != null && trxId != null) {
             return ParsedMfsData(
                 mfsName = mfsName,
                 amount = amount,
                 senderNumber = senderNumber,
-                trxId = trxId,
-                currentBalance = currentBalance
+                trxId = normalizeTrxId(trxId),
+                currentBalance = currentBalance,
+                direction = direction,
+                fee = fee
             )
         } else {
             Log.d(TAG, "Failed to parse: amount=$amount, trxId=$trxId")
             return null
         }
+    }
+
+    /**
+     * Detects whether the SMS is money coming IN (customer payment, cash in)
+     * or going OUT (cash out, send money, merchant payment).
+     *
+     * Outgoing cues are checked first because they are more specific:
+     * an incoming "received payment of Tk 500 from ..." must not match the
+     * outgoing "payment ... to ..." pattern ("from" != "to").
+     */
+    fun detectDirection(body: String): String {
+        val lower = body.lowercase()
+        if (lower.contains("cash out") || lower.contains("cashout")) return "out"
+        if (lower.contains("send money")) return "out"
+        if (Regex("\\bpayment\\b.{0,40}\\bto\\b").containsMatchIn(lower)) return "out"
+        if (Regex("\\bsent\\b.{0,20}tk").containsMatchIn(lower)) return "out"
+        // Default: incoming (previous behavior) — safest for payment matching.
+        return "in"
+    }
+
+    /**
+     * Extracts the fee/charge from a withdrawal SMS, e.g. "Fee Tk 9.25".
+     */
+    fun extractFee(body: String): String? {
+        val regex = Regex("(?i)(?:fee|charge|chrg)[\\s:]*Tk\\.?[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+        return regex.find(body)?.groupValues?.get(1)?.replace(",", "")
+    }
+
+    /**
+     * Converts Bengali digits to English digits, e.g. "৫০০" -> "500".
+     */
+    fun normalizeDigits(text: String): String {
+        val bnDigits = "০১২৩৪৫৬৭৮৯"
+        val sb = StringBuilder(text.length)
+        for (ch in text) {
+            val idx = bnDigits.indexOf(ch)
+            sb.append(if (idx >= 0) ('0' + idx) else ch)
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Canonical TrxID form used for dedupe: uppercase, alphanumeric only.
+     * Matches the normalization done server-side in StyleSphere's
+     * /api/sms-webhook, so "9hx8k2" and "9HX8K2" dedupe to one record.
+     */
+    fun normalizeTrxId(trxId: String): String {
+        return trxId.trim().uppercase().replace(Regex("[^A-Z0-9]"), "")
     }
 
     private fun determineMfsName(sender: String, body: String): String? {
@@ -55,10 +116,10 @@ object SmsParser {
 
         // 2. Body-level fallback if sender is generic number or shortcode
         return when {
-            lowerBody.contains("rocket") || lowerBody.contains("16216") || lowerBody.contains("dbbl") -> "Rocket"
-            lowerBody.contains("nagad") || lowerBody.contains("16167") -> "Nagad"
-            lowerBody.contains("upay") || lowerBody.contains("16268") -> "Upay"
-            lowerBody.contains("bkash") || lowerBody.contains("16247") -> "bKash"
+            lowerBody.contains("rocket") || lowerBody.contains("16216") || lowerBody.contains("dbbl") || lowerBody.contains("রকেট") -> "Rocket"
+            lowerBody.contains("nagad") || lowerBody.contains("16167") || lowerBody.contains("নগদ") -> "Nagad"
+            lowerBody.contains("upay") || lowerBody.contains("16268") || lowerBody.contains("উপায়") -> "Upay"
+            lowerBody.contains("bkash") || lowerBody.contains("16247") || lowerBody.contains("বিকাশ") -> "bKash"
             else -> null
         }
     }
@@ -69,6 +130,15 @@ object SmsParser {
         val primaryMatch = primaryRegex.find(body)
         if (primaryMatch != null) {
             return primaryMatch.groupValues[1].replace(",", "")
+        }
+
+        // 1b. Bangla style: matches "500 টাকা", "৳500", "টাকা 500"
+        // (digits are already normalized to English by normalizeDigits)
+        val banglaRegex = Regex("([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)\\s*(?:টাকা|৳)|(?:টাকা|৳)\\s*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+        val banglaMatch = banglaRegex.find(body)
+        if (banglaMatch != null) {
+            val value = banglaMatch.groupValues[1].ifEmpty { banglaMatch.groupValues[2] }
+            if (value.isNotEmpty()) return value.replace(",", "")
         }
 
         // 2. Secondary: matches "Tk. 500", "Tk 500.00", "BDT 500"
@@ -105,8 +175,8 @@ object SmsParser {
     }
 
     private fun extractBalance(body: String): String? {
-        // Matches Balance Tk 1500.50, Balance: BDT 500, Balance: 500.00 etc.
-        val regex = Regex("(?i)Balance[\\s:]*(?:Tk\\.?|BDT)?[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+        // Matches Balance Tk 1500.50, Balance: BDT 500, Balance: ৳500, Balance: 500.00 etc.
+        val regex = Regex("(?i)Balance[\\s:]*(?:Tk\\.?|BDT|৳)?[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
         val matchResult = regex.find(body)
         return matchResult?.groupValues?.get(1)?.replace(",", "")
     }

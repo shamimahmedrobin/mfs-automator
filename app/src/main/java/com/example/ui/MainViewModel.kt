@@ -42,9 +42,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val token = settings.apiToken.first()
             val deviceId = settings.deviceId.first()
             val customHeader = settings.customHeader.first()
+            val webhookSecret = settings.webhookSecret.first()
             
             val (isSuccess, errorMessage) = com.example.network.WebhookClient.postTransaction(
-                transaction, url, token, deviceId, customHeader
+                transaction, url, token, deviceId, customHeader, webhookSecret
             )
             
             dao.insertTransaction(transaction.copy(

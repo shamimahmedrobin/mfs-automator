@@ -48,6 +48,7 @@ fun SettingsScreen(
     val appTitle by viewModel.settings.appTitle.collectAsState(initial = "MFS Automator")
     val webhookUrl by viewModel.settings.webhookUrl.collectAsState(initial = "")
     val apiToken by viewModel.settings.apiToken.collectAsState(initial = "")
+    val webhookSecret by viewModel.settings.webhookSecret.collectAsState(initial = "")
     val themeMode by viewModel.settings.themeMode.collectAsState(initial = 2)
     val appLockEnabled by viewModel.settings.appLockEnabled.collectAsState(initial = false)
     val appPin by viewModel.settings.appPin.collectAsState(initial = "")
@@ -67,6 +68,7 @@ fun SettingsScreen(
     var tempAppTitle by remember(appTitle) { mutableStateOf(appTitle) }
     var tempWebhookUrl by remember(webhookUrl) { mutableStateOf(webhookUrl) }
     var tempApiToken by remember(apiToken) { mutableStateOf(apiToken) }
+    var tempWebhookSecret by remember(webhookSecret) { mutableStateOf(webhookSecret) }
     var tempDeviceId by remember(deviceId) { mutableStateOf(deviceId) }
     var tempCustomHeader by remember(customHeader) { mutableStateOf(customHeader) }
 
@@ -223,6 +225,19 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
+                        value = if (isApiSectionEditable) tempWebhookSecret else webhookSecret,
+                        onValueChange = { tempWebhookSecret = it },
+                        label = { Text("Webhook Secret (x-webhook-secret)") },
+                        readOnly = !isApiSectionEditable,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
                         value = if (isApiSectionEditable) tempDeviceId else deviceId,
                         onValueChange = { tempDeviceId = it },
                         label = { Text("Device ID / Shop Name") },
@@ -266,6 +281,7 @@ fun SettingsScreen(
                                 coroutineScope.launch {
                                     viewModel.settings.saveWebhookUrl(tempWebhookUrl)
                                     viewModel.settings.saveApiToken(tempApiToken)
+                                    viewModel.settings.saveWebhookSecret(tempWebhookSecret)
                                     viewModel.settings.saveDeviceId(tempDeviceId)
                                     viewModel.settings.saveCustomHeader(tempCustomHeader)
                                     isApiSectionEditable = false
@@ -316,6 +332,28 @@ fun SettingsScreen(
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface
                         )
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "If the balance check keeps flagging legit payments (e.g. after using the account from another phone), reset the baseline: the next transaction will be trusted once and its balance becomes the new reference.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                viewModel.settings.saveBaselineReset(true)
+                                Toast.makeText(context, "Baseline will reset on the next transaction", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("Reset balance check baseline")
+                    }
                 }
             }
             

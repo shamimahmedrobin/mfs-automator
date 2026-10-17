@@ -141,7 +141,7 @@ class MainActivity : FragmentActivity() {
                 val appPin by viewModel.settings.appPin.collectAsState(initial = "")
                 val appTitle by viewModel.settings.appTitle.collectAsState(initial = "MFS Automator")
                 val webhookUrl by viewModel.settings.webhookUrl.collectAsState(initial = "")
-                val isWebhookLive = webhookUrl.isNotBlank() && webhookUrl != "https://yourdomain.com/api/payment-callback"
+                val isWebhookLive = webhookUrl.isNotBlank()
                 var isAuthenticated by remember { mutableStateOf(false) }
                 
                 var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }

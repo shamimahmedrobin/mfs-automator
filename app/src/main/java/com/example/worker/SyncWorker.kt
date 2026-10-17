@@ -26,6 +26,7 @@ class SyncWorker(
             val token = settings.apiToken.first()
             val deviceId = settings.deviceId.first()
             val customHeader = settings.customHeader.first()
+            val webhookSecret = settings.webhookSecret.first()
 
             val unsyncedTransactions = dao.getAllUnsyncedTransactions()
 
@@ -36,7 +37,7 @@ class SyncWorker(
 
             for (transaction in unsyncedTransactions) {
                 val (isSuccess, errorMessage) = WebhookClient.postTransaction(
-                    transaction, url, token, deviceId, customHeader
+                    transaction, url, token, deviceId, customHeader, webhookSecret
                 )
                 if (isSuccess) {
                     dao.insertTransaction(transaction.copy(isSynced = true, errorLog = null))
