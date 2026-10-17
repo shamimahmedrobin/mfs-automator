@@ -101,6 +101,9 @@ object SmsParser {
         val lowerBody = body.lowercase()
 
         // 1. Sender-level strict priority (Originating address is authoritative)
+        if (lowerSender.contains("banglaqr") || lowerSender.contains("bangla qr")) {
+            return "BanglaQR"
+        }
         if (lowerSender.contains("16216") || lowerSender.contains("rocket") || lowerSender.contains("dbbl") || lowerSender.contains("nexus")) {
             return "Rocket"
         }
@@ -114,14 +117,33 @@ object SmsParser {
             return "Upay"
         }
 
-        // 2. Body-level fallback if sender is generic number or shortcode
+        // 2. Body-level fallback if sender is generic number or shortcode.
+        // Bangla QR first: it is the most specific keyword set (a Bangla QR
+        // payment settles to the merchant's bank/MFS account and the SMS
+        // mentions "Bangla QR").
         return when {
+            lowerBody.contains("bangla qr") || lowerBody.contains("banglaqr") -> "BanglaQR"
             lowerBody.contains("rocket") || lowerBody.contains("16216") || lowerBody.contains("dbbl") || lowerBody.contains("রকেট") -> "Rocket"
             lowerBody.contains("nagad") || lowerBody.contains("16167") || lowerBody.contains("নগদ") -> "Nagad"
             lowerBody.contains("upay") || lowerBody.contains("16268") || lowerBody.contains("উপায়") -> "Upay"
             lowerBody.contains("bkash") || lowerBody.contains("16247") || lowerBody.contains("বিকাশ") -> "bKash"
             else -> null
         }
+    }
+
+    /**
+     * Per-provider manual sender filter. The owner can list which sender
+     * name(s)/number(s) to accept SMS from, e.g. "16247, bKash" or a bank
+     * shortcode for Bangla QR. Empty filter = accept any recognized sender.
+     *
+     * @param smsSender the SMS originating address as received
+     * @param filterCsv comma-separated allowed sender fragments
+     */
+    fun senderAllowed(smsSender: String, filterCsv: String): Boolean {
+        val entries = filterCsv.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        if (entries.isEmpty()) return true
+        val sender = smsSender.lowercase()
+        return entries.any { entry -> sender.contains(entry) || entry.contains(sender) }
     }
 
     private fun extractAmount(body: String): String? {

@@ -22,6 +22,7 @@ class SettingsRepository(private val context: Context) {
         val NAGAD_ENABLED = booleanPreferencesKey("nagad_enabled")
         val ROCKET_ENABLED = booleanPreferencesKey("rocket_enabled")
         val UPAY_ENABLED = booleanPreferencesKey("upay_enabled")
+        val BANGLAQR_ENABLED = booleanPreferencesKey("banglaqr_enabled")
         val DEVICE_ID = stringPreferencesKey("device_id")
         val MIN_AMOUNT = stringPreferencesKey("min_amount")
         val CUSTOM_HEADER = stringPreferencesKey("custom_header")
@@ -29,6 +30,13 @@ class SettingsRepository(private val context: Context) {
         // When true, the next transaction skips the balance check once and its
         // balance becomes the new baseline (for broken chains: missed SMS etc.)
         val BASELINE_RESET = booleanPreferencesKey("baseline_reset")
+        // Manual sender allowlist per provider, comma-separated. Empty = accept any.
+        val BKASH_SENDERS = stringPreferencesKey("bkash_senders")
+        val NAGAD_SENDERS = stringPreferencesKey("nagad_senders")
+        val ROCKET_SENDERS = stringPreferencesKey("rocket_senders")
+        val UPAY_SENDERS = stringPreferencesKey("upay_senders")
+        val BANGLAQR_SENDERS = stringPreferencesKey("banglaqr_senders")
+        val AUTO_UPDATE = booleanPreferencesKey("auto_update")
     }
 
     // Empty default: the app must not silently POST to a placeholder URL.
@@ -47,6 +55,8 @@ class SettingsRepository(private val context: Context) {
     val nagadEnabled: Flow<Boolean> = context.dataStore.data.map { it[NAGAD_ENABLED] ?: true }
     val rocketEnabled: Flow<Boolean> = context.dataStore.data.map { it[ROCKET_ENABLED] ?: true }
     val upayEnabled: Flow<Boolean> = context.dataStore.data.map { it[UPAY_ENABLED] ?: true }
+    val banglaQrEnabled: Flow<Boolean> = context.dataStore.data.map { it[BANGLAQR_ENABLED] ?: true }
+    val autoUpdate: Flow<Boolean> = context.dataStore.data.map { it[AUTO_UPDATE] ?: true }
     
     val deviceId: Flow<String> = context.dataStore.data.map { it[DEVICE_ID] ?: "" }
     val minAmount: Flow<String> = context.dataStore.data.map { it[MIN_AMOUNT] ?: "0" }
@@ -72,7 +82,34 @@ class SettingsRepository(private val context: Context) {
                 "nagad" -> it[NAGAD_ENABLED] = enabled
                 "rocket" -> it[ROCKET_ENABLED] = enabled
                 "upay" -> it[UPAY_ENABLED] = enabled
+                "banglaqr", "bangla qr" -> it[BANGLAQR_ENABLED] = enabled
             }
         }
     }
+
+    /** Comma-separated manual sender allowlist for a provider. Empty = accept any. */
+    fun senderFilter(provider: String): Flow<String> = context.dataStore.data.map {
+        when (provider.lowercase()) {
+            "bkash" -> it[BKASH_SENDERS] ?: ""
+            "nagad" -> it[NAGAD_SENDERS] ?: ""
+            "rocket" -> it[ROCKET_SENDERS] ?: ""
+            "upay" -> it[UPAY_SENDERS] ?: ""
+            "banglaqr", "bangla qr" -> it[BANGLAQR_SENDERS] ?: ""
+            else -> ""
+        }
+    }
+
+    suspend fun saveSenderFilter(provider: String, csv: String) {
+        context.dataStore.edit {
+            when (provider.lowercase()) {
+                "bkash" -> it[BKASH_SENDERS] = csv
+                "nagad" -> it[NAGAD_SENDERS] = csv
+                "rocket" -> it[ROCKET_SENDERS] = csv
+                "upay" -> it[UPAY_SENDERS] = csv
+                "banglaqr", "bangla qr" -> it[BANGLAQR_SENDERS] = csv
+            }
+        }
+    }
+
+    suspend fun saveAutoUpdate(enabled: Boolean) { context.dataStore.edit { it[AUTO_UPDATE] = enabled } }
 }

@@ -38,6 +38,7 @@ object SmsInboxScanner {
                 val isNagadEnabled = settings.nagadEnabled.first()
                 val isRocketEnabled = settings.rocketEnabled.first()
                 val isUpayEnabled = settings.upayEnabled.first()
+                val isBanglaQrEnabled = settings.banglaQrEnabled.first()
                 val minAmountSetting = settings.minAmount.first().toDoubleOrNull() ?: 0.0
                 val deviceId = settings.deviceId.first()
 
@@ -53,10 +54,12 @@ object SmsInboxScanner {
                         "nagad" -> isNagadEnabled
                         "rocket" -> isRocketEnabled
                         "upay" -> isUpayEnabled
+                        "banglaqr" -> isBanglaQrEnabled
                         else -> false
                     }
                     val amountDouble = parsedData.amount.replace(",", "").toDoubleOrNull() ?: 0.0
                     if (!isEnabled || amountDouble < minAmountSetting) continue
+                    if (!SmsParser.senderAllowed(address, settings.senderFilter(parsedData.mfsName).first())) continue
 
                     // Check if already in DB (trxId normalized in SmsParser)
                     val existing = dao.getTransactionByTrxId(parsedData.trxId)

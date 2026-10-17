@@ -57,6 +57,19 @@ fun SettingsScreen(
     val nagadEnabled by viewModel.settings.nagadEnabled.collectAsState(initial = true)
     val rocketEnabled by viewModel.settings.rocketEnabled.collectAsState(initial = true)
     val upayEnabled by viewModel.settings.upayEnabled.collectAsState(initial = true)
+    val banglaQrEnabled by viewModel.settings.banglaQrEnabled.collectAsState(initial = true)
+    val autoUpdate by viewModel.settings.autoUpdate.collectAsState(initial = true)
+
+    val bkashSendersFlow = remember { viewModel.settings.senderFilter("bkash") }
+    val nagadSendersFlow = remember { viewModel.settings.senderFilter("nagad") }
+    val rocketSendersFlow = remember { viewModel.settings.senderFilter("rocket") }
+    val upaySendersFlow = remember { viewModel.settings.senderFilter("upay") }
+    val banglaQrSendersFlow = remember { viewModel.settings.senderFilter("banglaqr") }
+    val bkashSenders by bkashSendersFlow.collectAsState(initial = "")
+    val nagadSenders by nagadSendersFlow.collectAsState(initial = "")
+    val rocketSenders by rocketSendersFlow.collectAsState(initial = "")
+    val upaySenders by upaySendersFlow.collectAsState(initial = "")
+    val banglaQrSenders by banglaQrSendersFlow.collectAsState(initial = "")
     
     val deviceId by viewModel.settings.deviceId.collectAsState(initial = "")
     val minAmount by viewModel.settings.minAmount.collectAsState(initial = "0")
@@ -314,11 +327,53 @@ fun SettingsScreen(
             item {
                 SettingsSectionTitle("MFS LISTENERS")
                 SettingsCard {
-                    ProviderToggle("bKash", bkashEnabled) { coroutineScope.launch { viewModel.settings.toggleProvider("bkash", it) } }
-                    ProviderToggle("Nagad", nagadEnabled) { coroutineScope.launch { viewModel.settings.toggleProvider("nagad", it) } }
-                    ProviderToggle("Rocket", rocketEnabled) { coroutineScope.launch { viewModel.settings.toggleProvider("rocket", it) } }
-                    ProviderToggle("Upay", upayEnabled) { coroutineScope.launch { viewModel.settings.toggleProvider("upay", it) } }
-                    
+                    ProviderListenerRow(
+                        name = "bKash",
+                        checked = bkashEnabled,
+                        onCheckedChange = { coroutineScope.launch { viewModel.settings.toggleProvider("bkash", it) } },
+                        senderFilter = bkashSenders,
+                        onSenderFilterChange = { coroutineScope.launch { viewModel.settings.saveSenderFilter("bkash", it) } },
+                        filterHint = "e.g. 16247, bKash"
+                    )
+                    ProviderListenerRow(
+                        name = "Nagad",
+                        checked = nagadEnabled,
+                        onCheckedChange = { coroutineScope.launch { viewModel.settings.toggleProvider("nagad", it) } },
+                        senderFilter = nagadSenders,
+                        onSenderFilterChange = { coroutineScope.launch { viewModel.settings.saveSenderFilter("nagad", it) } },
+                        filterHint = "e.g. 16167, Nagad"
+                    )
+                    ProviderListenerRow(
+                        name = "Rocket",
+                        checked = rocketEnabled,
+                        onCheckedChange = { coroutineScope.launch { viewModel.settings.toggleProvider("rocket", it) } },
+                        senderFilter = rocketSenders,
+                        onSenderFilterChange = { coroutineScope.launch { viewModel.settings.saveSenderFilter("rocket", it) } },
+                        filterHint = "e.g. 16216, Rocket"
+                    )
+                    ProviderListenerRow(
+                        name = "Upay",
+                        checked = upayEnabled,
+                        onCheckedChange = { coroutineScope.launch { viewModel.settings.toggleProvider("upay", it) } },
+                        senderFilter = upaySenders,
+                        onSenderFilterChange = { coroutineScope.launch { viewModel.settings.saveSenderFilter("upay", it) } },
+                        filterHint = "e.g. 16268, Upay"
+                    )
+                    ProviderListenerRow(
+                        name = "Bangla QR",
+                        checked = banglaQrEnabled,
+                        onCheckedChange = { coroutineScope.launch { viewModel.settings.toggleProvider("banglaqr", it) } },
+                        senderFilter = banglaQrSenders,
+                        onSenderFilterChange = { coroutineScope.launch { viewModel.settings.saveSenderFilter("banglaqr", it) } },
+                        filterHint = "e.g. your bank shortcode"
+                    )
+
+                    Text(
+                        "Sender filter: only SMS from these sender names/numbers will be read (comma separated). Leave empty to accept any recognized sender.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = minAmount,
@@ -356,7 +411,23 @@ fun SettingsScreen(
                     }
                 }
             }
-            
+
+            // Section: App Updates
+            item {
+                SettingsSectionTitle("APP UPDATES")
+                SettingsCard {
+                    ProviderToggle("Auto-update app", autoUpdate) {
+                        coroutineScope.launch { viewModel.settings.saveAutoUpdate(it) }
+                    }
+                    Text(
+                        "When on, new versions download automatically in the background. " +
+                                "Android will still ask you to confirm the install.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             // Section: Security
             item {
                 SettingsSectionTitle("SECURITY & SYSTEM")
@@ -635,5 +706,34 @@ fun ProviderToggle(name: String, checked: Boolean, onCheckedChange: (Boolean) ->
     ) {
         Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+fun ProviderListenerRow(
+    name: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    senderFilter: String,
+    onSenderFilterChange: (String) -> Unit,
+    filterHint: String
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        ProviderToggle(name = name, checked = checked, onCheckedChange = onCheckedChange)
+        if (checked) {
+            OutlinedTextField(
+                value = senderFilter,
+                onValueChange = onSenderFilterChange,
+                label = { Text("Sender filter (optional)") },
+                placeholder = { Text(filterHint) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
     }
 }

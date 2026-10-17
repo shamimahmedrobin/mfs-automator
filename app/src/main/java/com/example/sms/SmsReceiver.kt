@@ -76,6 +76,7 @@ class SmsReceiver : BroadcastReceiver() {
                 val isNagadEnabled = settings.nagadEnabled.first()
                 val isRocketEnabled = settings.rocketEnabled.first()
                 val isUpayEnabled = settings.upayEnabled.first()
+                val isBanglaQrEnabled = settings.banglaQrEnabled.first()
                 
                 val deviceId = settings.deviceId.first()
                 val customHeader = settings.customHeader.first()
@@ -94,6 +95,7 @@ class SmsReceiver : BroadcastReceiver() {
                     "nagad" -> isNagadEnabled
                     "rocket" -> isRocketEnabled
                     "upay" -> isUpayEnabled
+                    "banglaqr" -> isBanglaQrEnabled
                     else -> false
                 }
 
@@ -101,6 +103,14 @@ class SmsReceiver : BroadcastReceiver() {
 
                 if (!isEnabled || amountDouble < minAmountSetting) {
                     Log.d(TAG, "Skipped: Provider disabled or amount ($amountDouble) less than min limit ($minAmountSetting).")
+                    return@launch
+                }
+
+                // Manual sender allowlist: only read SMS from the configured
+                // sender name(s)/number(s) for this provider.
+                val senderFilter = settings.senderFilter(parsedData.mfsName).first()
+                if (!SmsParser.senderAllowed(sender, senderFilter)) {
+                    Log.d(TAG, "Skipped: sender '$sender' not in allowlist for ${parsedData.mfsName}.")
                     return@launch
                 }
 

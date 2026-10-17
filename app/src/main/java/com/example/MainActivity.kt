@@ -146,13 +146,24 @@ class MainActivity : FragmentActivity() {
                 
                 var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
                 val updateManager = remember { UpdateManager(this@MainActivity) }
+                val autoUpdate by viewModel.settings.autoUpdate.collectAsState(initial = true)
                 
                 LaunchedEffect(Unit) {
                     updateInfo = updateManager.checkForUpdate()
                     viewModel.scanInbox(hoursBack = 48)
                 }
 
-                if (updateInfo != null) {
+                // Auto-update: download in the background without asking.
+                // Android still shows the install confirmation — that part
+                // cannot be skipped for sideloaded apps.
+                LaunchedEffect(updateInfo, autoUpdate) {
+                    if (updateInfo != null && autoUpdate) {
+                        updateManager.downloadAndInstall(updateInfo!!)
+                        updateInfo = null
+                    }
+                }
+
+                if (updateInfo != null && !autoUpdate) {
                     AlertDialog(
                         onDismissRequest = { updateInfo = null },
                         title = { Text("Update Available") },
@@ -340,13 +351,24 @@ fun DashboardScreen(
     onRetryClick: (PaymentTransaction) -> Unit, 
     modifier: Modifier = Modifier
 ) {
-    val totalAmount = transactions.sumOf { it.amount.replace(",", "").toDoubleOrNull() ?: 0.0 }
-    val syncedCount = transactions.count { it.isSynced }
+    val startOfToday = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    val todayTx = transactions.filter { it.timestamp >= startOfToday }
+    val totalInToday = todayTx.filter { it.direction != "out" }
+        .sumOf { it.amount.replace(",", "").toDoubleOrNull() ?: 0.0 }
+    val totalOutToday = todayTx.filter { it.direction == "out" }
+        .sumOf { it.amount.replace(",", "").toDoubleOrNull() ?: 0.0 }
+    val pendingSyncCount = transactions.count { !it.isSynced }
 
     var timeFilter by remember { mutableStateOf("All") }
     var statusFilter by remember { mutableStateOf("All") }
+    var directionFilter by remember { mutableStateOf("All") }
 
-    val filteredHistory = remember(transactions, timeFilter, statusFilter) {
+    val filteredHistory = remember(transactions, timeFilter, statusFilter, directionFilter) {
         transactions.filter {
             val timeMatch = when (timeFilter) {
                 "Daily" -> it.timestamp >= (System.currentTimeMillis() - 24 * 60 * 60 * 1000L)
@@ -360,7 +382,13 @@ fun DashboardScreen(
                 "Failed" -> !it.isSynced && it.errorLog != null
                 else -> true
             }
-            timeMatch && statusMatch
+            val directionMatch = when (directionFilter) {
+                "In" -> it.direction != "out"
+                "Out" -> it.direction == "out"
+                "Suspicious" -> it.isSuspicious
+                else -> true
+            }
+            timeMatch && statusMatch && directionMatch
         }
     }
 
@@ -439,17 +467,17 @@ fun DashboardScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "TODAY'S TOTAL",
+                        text = "MONEY IN (TODAY)",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = String.format("৳ %,.2f", totalAmount),
+                        text = String.format("৳ %,.2f", totalInToday),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = com.example.ui.theme.SuccessGreen
                     )
                 }
             }
@@ -461,17 +489,17 @@ fun DashboardScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "SYNC STATUS",
+                        text = "MONEY OUT (TODAY)",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "$syncedCount Success",
+                        text = String.format("৳ %,.2f", totalOutToday),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = com.example.ui.theme.WarningOrange
                     )
                 }
             }
@@ -497,6 +525,23 @@ fun DashboardScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 1.sp
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (pendingSyncCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(com.example.ui.theme.WarningOrange.copy(alpha = 0.1f))
+                        .border(1.dp, com.example.ui.theme.WarningOrange.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "$pendingSyncCount pending sync",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = com.example.ui.theme.WarningOrange
+                    )
+                }
+            }
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
@@ -516,12 +561,14 @@ fun DashboardScreen(
                     textDecoration = if (isWebhookLive) TextDecoration.None else TextDecoration.LineThrough
                 )
             }
+            } // Row: pending-sync + webhook pills
         }
 
         if (currentTab == "history") {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 var timeExpanded by remember { mutableStateOf(false) }
                 var statusExpanded by remember { mutableStateOf(false) }
+                var directionExpanded by remember { mutableStateOf(false) }
                 
                 ExposedDropdownMenuBox(
                     expanded = timeExpanded,
@@ -577,6 +624,36 @@ fun DashboardScreen(
                                 onClick = {
                                     statusFilter = filter
                                     statusExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                ExposedDropdownMenuBox(
+                    expanded = directionExpanded,
+                    onExpandedChange = { directionExpanded = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = directionFilter,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Direction") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = directionExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier.menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = directionExpanded,
+                        onDismissRequest = { directionExpanded = false }
+                    ) {
+                        listOf("All", "In", "Out", "Suspicious").forEach { filter ->
+                            DropdownMenuItem(
+                                text = { Text(filter) },
+                                onClick = {
+                                    directionFilter = filter
+                                    directionExpanded = false
                                 }
                             )
                         }
@@ -673,14 +750,45 @@ fun DashboardScreen(
 }
 
 @Composable
+fun DirectionBadge(isOut: Boolean) {
+    val badgeColor = if (isOut) com.example.ui.theme.WarningOrange else com.example.ui.theme.SuccessGreen
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(badgeColor.copy(alpha = 0.15f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isOut) "↑ OUT" else "↓ IN",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = badgeColor
+        )
+    }
+}
+
+private val txDateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault())
+
+fun formatTxDateTime(timestamp: Long): String {
+    return try {
+        txDateFormat.format(java.util.Date(timestamp))
+    } catch (_: Exception) {
+        ""
+    }
+}
+
+@Composable
 fun TransactionItem(transaction: PaymentTransaction, onRetryClick: ((PaymentTransaction) -> Unit)? = null) {
     val mfsColor = when (transaction.mfsName) {
         "bKash" -> com.example.ui.theme.MfsBkash
         "Nagad" -> com.example.ui.theme.MfsNagad
         "Rocket" -> com.example.ui.theme.MfsRocket
         "Upay" -> com.example.ui.theme.MfsUpay
+        "BanglaQR" -> com.example.ui.theme.MfsBanglaQr
         else -> MaterialTheme.colorScheme.secondary
     }
+    val isOut = transaction.direction == "out"
 
     Card(
         modifier = Modifier
@@ -725,14 +833,18 @@ fun TransactionItem(transaction: PaymentTransaction, onRetryClick: ((PaymentTran
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "৳ ${transaction.amount}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "৳ ${transaction.amount}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        DirectionBadge(isOut = isOut)
+                    }
                     Text(
                         text = "TrxID: ${transaction.trxId}",
                         style = MaterialTheme.typography.labelSmall,
@@ -740,15 +852,60 @@ fun TransactionItem(transaction: PaymentTransaction, onRetryClick: ((PaymentTran
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(4.dp))
-                
-                Text(
-                    text = "Sender: ${transaction.senderNumber}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = (if (isOut) "To: " else "From: ") + transaction.senderNumber,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = formatTxDateTime(transaction.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+
+                if (isOut && !transaction.fee.isNullOrBlank()) {
+                    Text(
+                        text = "Fee: ৳ ${transaction.fee}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (transaction.isSuspicious) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Warning,
+                            contentDescription = "Suspicious",
+                            tint = com.example.ui.theme.WarningOrange,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Suspicious — needs review" + (if (!transaction.suspicionReason.isNullOrBlank()) ": ${transaction.suspicionReason}" else ""),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = com.example.ui.theme.WarningOrange,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Row(
