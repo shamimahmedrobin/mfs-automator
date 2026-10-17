@@ -70,6 +70,12 @@ object WebhookClient {
                 // full_sms / message / body — raw_sms alone is ignored there.
                 put("full_sms", transaction.body)
                 put("is_suspicious", transaction.isSuspicious)
+                // "in" = customer payment (matchable to orders), "out" = owner
+                // withdrawal — the server must NOT match these to orders.
+                put("direction", transaction.direction)
+                if (!transaction.fee.isNullOrBlank()) {
+                    put("fee", transaction.fee)
+                }
                 if (!transaction.suspicionReason.isNullOrBlank()) {
                     put("suspicion_reason", transaction.suspicionReason)
                 }

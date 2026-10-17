@@ -332,6 +332,28 @@ fun SettingsScreen(
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface
                         )
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "If the balance check keeps flagging legit payments (e.g. after using the account from another phone), reset the baseline: the next transaction will be trusted once and its balance becomes the new reference.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                viewModel.settings.saveBaselineReset(true)
+                                Toast.makeText(context, "Baseline will reset on the next transaction", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("Reset balance check baseline")
+                    }
                 }
             }
             

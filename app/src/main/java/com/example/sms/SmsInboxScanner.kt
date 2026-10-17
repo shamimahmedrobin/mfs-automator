@@ -65,6 +65,8 @@ object SmsInboxScanner {
                             dao,
                             parsedData.mfsName,
                             parsedData.amount,
+                            parsedData.direction,
+                            parsedData.fee,
                             parsedData.currentBalance,
                             date
                         )
@@ -80,7 +82,9 @@ object SmsInboxScanner {
                             isSynced = false,
                             errorLog = "Pending sync",
                             isSuspicious = isSuspicious,
-                            suspicionReason = suspicionReason
+                            suspicionReason = suspicionReason,
+                            direction = parsedData.direction,
+                            fee = parsedData.fee
                         )
                         dao.insertTransaction(transaction)
                         importedCount++

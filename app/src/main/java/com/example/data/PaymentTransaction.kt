@@ -25,5 +25,9 @@ data class PaymentTransaction(
     // Fraud flag from the balance cross-check (see BalanceCheck): the record is
     // still forwarded to the server — the server decides how to treat it.
     val isSuspicious: Boolean = false,
-    val suspicionReason: String? = null
+    val suspicionReason: String? = null,
+    // "in" = money received, "out" = withdrawn/spent. Outgoing legs keep the
+    // balance chain continuous; the server must NOT match them to orders.
+    val direction: String = "in",
+    val fee: String? = null
 )

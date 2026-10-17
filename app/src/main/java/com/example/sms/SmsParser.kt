@@ -10,7 +10,13 @@ object SmsParser {
         val amount: String,
         val senderNumber: String,
         val trxId: String,
-        val currentBalance: String? = null
+        val currentBalance: String? = null,
+        // "in" = money received (customer payment), "out" = money withdrawn/spent
+        // (cash out, send money, merchant payment). Outgoing legs keep the
+        // balance chain continuous when the owner withdraws funds.
+        val direction: String = "in",
+        // Fee/charge shown on withdrawal SMS, e.g. "Fee Tk 9.25"
+        val fee: String? = null
     )
 
     fun parseMessage(sender: String, body: String): ParsedMfsData? {
@@ -23,6 +29,8 @@ object SmsParser {
         val trxId = extractTrxId(normalizedBody)
         val senderNumber = extractSenderNumber(normalizedBody) ?: sender
         val currentBalance = extractBalance(normalizedBody)
+        val direction = detectDirection(normalizedBody)
+        val fee = if (direction == "out") extractFee(normalizedBody) else null
 
         if (amount != null && trxId != null) {
             return ParsedMfsData(
@@ -30,12 +38,40 @@ object SmsParser {
                 amount = amount,
                 senderNumber = senderNumber,
                 trxId = normalizeTrxId(trxId),
-                currentBalance = currentBalance
+                currentBalance = currentBalance,
+                direction = direction,
+                fee = fee
             )
         } else {
             Log.d(TAG, "Failed to parse: amount=$amount, trxId=$trxId")
             return null
         }
+    }
+
+    /**
+     * Detects whether the SMS is money coming IN (customer payment, cash in)
+     * or going OUT (cash out, send money, merchant payment).
+     *
+     * Outgoing cues are checked first because they are more specific:
+     * an incoming "received payment of Tk 500 from ..." must not match the
+     * outgoing "payment ... to ..." pattern ("from" != "to").
+     */
+    fun detectDirection(body: String): String {
+        val lower = body.lowercase()
+        if (lower.contains("cash out") || lower.contains("cashout")) return "out"
+        if (lower.contains("send money")) return "out"
+        if (Regex("\\bpayment\\b.{0,40}\\bto\\b").containsMatchIn(lower)) return "out"
+        if (Regex("\\bsent\\b.{0,20}tk").containsMatchIn(lower)) return "out"
+        // Default: incoming (previous behavior) — safest for payment matching.
+        return "in"
+    }
+
+    /**
+     * Extracts the fee/charge from a withdrawal SMS, e.g. "Fee Tk 9.25".
+     */
+    fun extractFee(body: String): String? {
+        val regex = Regex("(?i)(?:fee|charge|chrg)[\\s:]*Tk\\.?[\\s:]*([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+        return regex.find(body)?.groupValues?.get(1)?.replace(",", "")
     }
 
     /**

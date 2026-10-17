@@ -26,6 +26,9 @@ class SettingsRepository(private val context: Context) {
         val MIN_AMOUNT = stringPreferencesKey("min_amount")
         val CUSTOM_HEADER = stringPreferencesKey("custom_header")
         val WEBHOOK_SECRET = stringPreferencesKey("webhook_secret")
+        // When true, the next transaction skips the balance check once and its
+        // balance becomes the new baseline (for broken chains: missed SMS etc.)
+        val BASELINE_RESET = booleanPreferencesKey("baseline_reset")
     }
 
     // Empty default: the app must not silently POST to a placeholder URL.
@@ -34,6 +37,7 @@ class SettingsRepository(private val context: Context) {
     val apiToken: Flow<String> = context.dataStore.data.map { it[API_TOKEN] ?: "" }
     // Sent as the x-webhook-secret header; required by StyleSphere's /api/sms-webhook.
     val webhookSecret: Flow<String> = context.dataStore.data.map { it[WEBHOOK_SECRET] ?: "" }
+    val baselineReset: Flow<Boolean> = context.dataStore.data.map { it[BASELINE_RESET] ?: false }
     val themeMode: Flow<Int> = context.dataStore.data.map { it[THEME_MODE] ?: 2 } // Default Dark Mode based on current design
     val appLockEnabled: Flow<Boolean> = context.dataStore.data.map { it[APP_LOCK] ?: false }
     val appPin: Flow<String> = context.dataStore.data.map { it[APP_PIN] ?: "" }
@@ -59,6 +63,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveMinAmount(amount: String) { context.dataStore.edit { it[MIN_AMOUNT] = amount } }
     suspend fun saveCustomHeader(header: String) { context.dataStore.edit { it[CUSTOM_HEADER] = header } }
     suspend fun saveWebhookSecret(secret: String) { context.dataStore.edit { it[WEBHOOK_SECRET] = secret } }
+    suspend fun saveBaselineReset(reset: Boolean) { context.dataStore.edit { it[BASELINE_RESET] = reset } }
     
     suspend fun toggleProvider(provider: String, enabled: Boolean) {
         context.dataStore.edit {

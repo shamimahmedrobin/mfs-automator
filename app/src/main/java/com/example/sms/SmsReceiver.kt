@@ -81,6 +81,13 @@ class SmsReceiver : BroadcastReceiver() {
                 val customHeader = settings.customHeader.first()
                 val webhookSecret = settings.webhookSecret.first()
                 val minAmountSetting = settings.minAmount.first().toDoubleOrNull() ?: 0.0
+                // Owner tapped "Reset balance baseline": skip the check once and
+                // adopt this transaction's balance as the new baseline.
+                val skipBalanceCheck = settings.baselineReset.first()
+                if (skipBalanceCheck) {
+                    settings.saveBaselineReset(false)
+                    Log.d(TAG, "Balance baseline reset by owner — skipping check for ${parsedData.trxId}.")
+                }
 
                 val isEnabled = when (parsedData.mfsName.lowercase()) {
                     "bkash" -> isBkashEnabled
@@ -108,15 +115,23 @@ class SmsReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // Fraud check: does the SMS balance line up with prev balance + amount?
-                // Flagged transactions are still stored and forwarded — the server decides.
-                val (isSuspicious, suspicionReason) = BalanceCheck.evaluate(
-                    dao,
-                    parsedData.mfsName,
-                    parsedData.amount,
-                    parsedData.currentBalance,
-                    timestamp
-                )
+                // Fraud check: does the SMS balance line up with the money chain?
+                // Withdrawals are tracked as negative legs, so the chain stays
+                // continuous when the owner takes money out. Flagged records are
+                // still stored and forwarded — the server decides.
+                val (isSuspicious, suspicionReason) = if (skipBalanceCheck) {
+                    false to null
+                } else {
+                    BalanceCheck.evaluate(
+                        dao,
+                        parsedData.mfsName,
+                        parsedData.amount,
+                        parsedData.direction,
+                        parsedData.fee,
+                        parsedData.currentBalance,
+                        timestamp
+                    )
+                }
                 if (isSuspicious) {
                     Log.w(TAG, "Suspicious transaction ${parsedData.trxId}: $suspicionReason")
                 }
@@ -133,7 +148,9 @@ class SmsReceiver : BroadcastReceiver() {
                     isSynced = false,
                     errorLog = "Sync in progress...",
                     isSuspicious = isSuspicious,
-                    suspicionReason = suspicionReason
+                    suspicionReason = suspicionReason,
+                    direction = parsedData.direction,
+                    fee = parsedData.fee
                 )
 
                 // CRITICAL: SAVE TO DATABASE FIRST! Even in zero/low network, the transaction is safely recorded.
