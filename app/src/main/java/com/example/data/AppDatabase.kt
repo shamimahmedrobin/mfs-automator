@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [PaymentTransaction::class], version = 3, exportSchema = false)
+@Database(entities = [PaymentTransaction::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun paymentTransactionDao(): PaymentTransactionDao
 
@@ -34,7 +34,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATION_1_3 = object : Migration(1, 3) {
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE payment_transactions ADD COLUMN isSuspicious INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE payment_transactions ADD COLUMN suspicionReason TEXT DEFAULT NULL")
+                } catch (_: Exception) {}
+                try {
+                    // Hard dedupe guard: trxIds are normalized before insert.
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_payment_transactions_trxId ON payment_transactions(trxId)")
+                } catch (_: Exception) {}
+            }
+        }
+
+        val MIGRATION_1_4 = object : Migration(1, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 try {
                     db.execSQL("ALTER TABLE payment_transactions ADD COLUMN deviceId TEXT DEFAULT NULL")
@@ -44,6 +59,32 @@ abstract class AppDatabase : RoomDatabase() {
                 } catch (_: Exception) {}
                 try {
                     db.execSQL("ALTER TABLE payment_transactions ADD COLUMN currentBalance TEXT DEFAULT NULL")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE payment_transactions ADD COLUMN isSuspicious INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE payment_transactions ADD COLUMN suspicionReason TEXT DEFAULT NULL")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_payment_transactions_trxId ON payment_transactions(trxId)")
+                } catch (_: Exception) {}
+            }
+        }
+
+        val MIGRATION_2_4 = object : Migration(2, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE payment_transactions ADD COLUMN currentBalance TEXT DEFAULT NULL")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE payment_transactions ADD COLUMN isSuspicious INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE payment_transactions ADD COLUMN suspicionReason TEXT DEFAULT NULL")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_payment_transactions_trxId ON payment_transactions(trxId)")
                 } catch (_: Exception) {}
             }
         }
@@ -55,7 +96,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mfs_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_1_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_1_4, MIGRATION_2_4)
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
                 INSTANCE = instance

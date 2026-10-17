@@ -25,10 +25,15 @@ class SettingsRepository(private val context: Context) {
         val DEVICE_ID = stringPreferencesKey("device_id")
         val MIN_AMOUNT = stringPreferencesKey("min_amount")
         val CUSTOM_HEADER = stringPreferencesKey("custom_header")
+        val WEBHOOK_SECRET = stringPreferencesKey("webhook_secret")
     }
 
-    val webhookUrl: Flow<String> = context.dataStore.data.map { it[WEBHOOK_URL] ?: "https://yourdomain.com/api/payment-callback" }
+    // Empty default: the app must not silently POST to a placeholder URL.
+    // Callers treat a blank URL as "not configured".
+    val webhookUrl: Flow<String> = context.dataStore.data.map { it[WEBHOOK_URL] ?: "" }
     val apiToken: Flow<String> = context.dataStore.data.map { it[API_TOKEN] ?: "" }
+    // Sent as the x-webhook-secret header; required by StyleSphere's /api/sms-webhook.
+    val webhookSecret: Flow<String> = context.dataStore.data.map { it[WEBHOOK_SECRET] ?: "" }
     val themeMode: Flow<Int> = context.dataStore.data.map { it[THEME_MODE] ?: 2 } // Default Dark Mode based on current design
     val appLockEnabled: Flow<Boolean> = context.dataStore.data.map { it[APP_LOCK] ?: false }
     val appPin: Flow<String> = context.dataStore.data.map { it[APP_PIN] ?: "" }
@@ -53,6 +58,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveDeviceId(id: String) { context.dataStore.edit { it[DEVICE_ID] = id } }
     suspend fun saveMinAmount(amount: String) { context.dataStore.edit { it[MIN_AMOUNT] = amount } }
     suspend fun saveCustomHeader(header: String) { context.dataStore.edit { it[CUSTOM_HEADER] = header } }
+    suspend fun saveWebhookSecret(secret: String) { context.dataStore.edit { it[WEBHOOK_SECRET] = secret } }
     
     suspend fun toggleProvider(provider: String, enabled: Boolean) {
         context.dataStore.edit {

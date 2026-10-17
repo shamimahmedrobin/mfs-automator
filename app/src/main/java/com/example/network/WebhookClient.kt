@@ -1,6 +1,7 @@
 package com.example.network
 
 import android.util.Log
+import com.example.BuildConfig
 import com.example.data.PaymentTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,14 +14,18 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 object WebhookClient {
-    private const val WEBHOOK_URL = "https://yourdomain.com/api/payment-callback"
     private const val TAG = "WebhookClient"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+        // Never log full bodies in release builds: payloads contain customer
+        // phone numbers and raw MFS SMS text.
+        .addInterceptor(HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                    else HttpLoggingInterceptor.Level.NONE
+        })
         .build()
 
     suspend fun postTransaction(
@@ -28,8 +33,12 @@ object WebhookClient {
         url: String,
         token: String,
         deviceId: String = "",
-        customHeader: String = ""
+        customHeader: String = "",
+        webhookSecret: String = ""
     ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
+        if (url.isBlank()) {
+            return@withContext Pair(false, "Webhook URL not configured")
+        }
         try {
             val cleanAmountStr = transaction.amount.replace(",", "").trim()
             val numericAmount: Number? = cleanAmountStr.toDoubleOrNull()?.let {
@@ -57,13 +66,23 @@ object WebhookClient {
                 put("timestamp", transaction.timestamp)
                 put("device_id", activeDeviceId)
                 put("raw_sms", transaction.body)
+                // StyleSphere's /api/sms-webhook reads the full SMS text from
+                // full_sms / message / body — raw_sms alone is ignored there.
+                put("full_sms", transaction.body)
+                put("is_suspicious", transaction.isSuspicious)
+                if (!transaction.suspicionReason.isNullOrBlank()) {
+                    put("suspicion_reason", transaction.suspicionReason)
+                }
             }
 
             val requestBody = jsonObject.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val requestBuilder = Request.Builder()
-                .url(if (url.isNotBlank()) url else "https://yourdomain.com/api/payment-callback")
+                .url(url)
                 .post(requestBody)
-                
+
+            if (webhookSecret.isNotBlank()) {
+                requestBuilder.addHeader("x-webhook-secret", webhookSecret)
+            }
             if (token.isNotBlank()) {
                 requestBuilder.addHeader("Authorization", "Bearer $token")
             }

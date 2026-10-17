@@ -17,6 +17,14 @@ interface PaymentTransactionDao {
     @Query("SELECT * FROM payment_transactions WHERE trxId = :trxId LIMIT 1")
     suspend fun getTransactionByTrxId(trxId: String): PaymentTransaction?
 
+    /**
+     * Latest transaction for a provider that carried a balance figure, before a
+     * given timestamp. Used by BalanceCheck to verify the new SMS's balance is
+     * consistent with the previous balance + received amount.
+     */
+    @Query("SELECT * FROM payment_transactions WHERE mfsName = :provider AND currentBalance IS NOT NULL AND timestamp < :beforeTimestamp ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestBalanceBefore(provider: String, beforeTimestamp: Long): PaymentTransaction?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: PaymentTransaction): Long
     
