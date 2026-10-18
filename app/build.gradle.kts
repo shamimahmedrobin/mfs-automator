@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.mfsreader.kpwzyt"
     minSdk = 24
     targetSdk = 36
-    versionCode = 8
-    versionName = "3.2"
+    versionCode = 9
+    versionName = "3.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
