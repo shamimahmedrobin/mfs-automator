@@ -94,7 +94,7 @@ class MfsForegroundService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("🟢 MFS Listener Active")
-            .setContentText("Monitoring bKash, Nagad, Rocket (16216) & Upay SMS")
+            .setContentText("bKash • Nagad • Rocket • Upay")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
