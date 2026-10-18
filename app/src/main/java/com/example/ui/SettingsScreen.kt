@@ -78,6 +78,13 @@ fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var isTestingWebhook by remember { mutableStateOf(false) }
     var webhookTestResult by remember { mutableStateOf<com.example.network.WebhookTestResult?>(null) }
+    var testSmsSender by remember { mutableStateOf("bKash") }
+    var testSmsBody by remember {
+        mutableStateOf(
+            "You have received Tk 1,500.00 from 01580922455. TrxID TEST123ABC at 18/10/2026 09:27. Balance Tk 6,500.00."
+        )
+    }
+    var isSendingTestSms by remember { mutableStateOf(false) }
     
     var isApiSectionEditable by remember { mutableStateOf(false) }
     var tempAppTitle by remember(appTitle) { mutableStateOf(appTitle) }
@@ -343,6 +350,87 @@ fun SettingsScreen(
                     }
                     Text(
                         "Sends one fake test payment to the server to verify auth → parsing → auto-match. Nothing is saved and no real order is touched.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Section: Send Test SMS
+            item {
+                SettingsSectionTitle("SEND TEST SMS")
+                SettingsCard {
+                    Text(
+                        "Simulate an incoming payment SMS through the REAL pipeline — parse → save → webhook. " +
+                                "The server will treat it as a genuine payment and may confirm a matching order. " +
+                                "Use only with test orders.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = testSmsSender,
+                        onValueChange = { testSmsSender = it },
+                        label = { Text("Sender (e.g. bKash, Nagad, 16216)") },
+                        placeholder = { Text("bKash") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = testSmsBody,
+                        onValueChange = { testSmsBody = it },
+                        label = { Text("Detailed Message") },
+                        placeholder = { Text("Paste the full bKash / Nagad SMS text here and edit the amount, TrxID and phone") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 5,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            if (!isSendingTestSms && testSmsSender.isNotBlank() && testSmsBody.isNotBlank()) {
+                                isSendingTestSms = true
+                                viewModel.sendTestSms(testSmsSender, testSmsBody) { result ->
+                                    isSendingTestSms = false
+                                    val msg = if (result.accepted) {
+                                        "✓ Test SMS processed (TrxID ${result.trxId}): ${result.reason}"
+                                    } else {
+                                        "✗ ${result.reason}"
+                                    }
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                }
+                            } else if (testSmsSender.isBlank() || testSmsBody.isBlank()) {
+                                Toast.makeText(context, "Enter both sender and message", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isSendingTestSms,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        if (isSendingTestSms) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Sending…")
+                        } else {
+                            Text("📩 Send Test SMS")
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Tip: place a test order first, then match its phone number, amount and TrxID in the message above. " +
+                                "Each test needs a fresh TrxID — already-used ones are skipped.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
