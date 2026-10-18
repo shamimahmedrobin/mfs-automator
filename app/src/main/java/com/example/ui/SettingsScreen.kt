@@ -76,6 +76,8 @@ fun SettingsScreen(
     val customHeader by viewModel.settings.customHeader.collectAsState(initial = "")
 
     var showClearDialog by remember { mutableStateOf(false) }
+    var isTestingWebhook by remember { mutableStateOf(false) }
+    var webhookTestResult by remember { mutableStateOf<com.example.network.WebhookTestResult?>(null) }
     
     var isApiSectionEditable by remember { mutableStateOf(false) }
     var tempAppTitle by remember(appTitle) { mutableStateOf(appTitle) }
@@ -144,6 +146,13 @@ fun SettingsScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    webhookTestResult?.let { result ->
+        WebhookTestResultDialog(
+            result = result,
+            onDismiss = { webhookTestResult = null }
         )
     }
 
@@ -306,6 +315,37 @@ fun SettingsScreen(
                             Text("Save changes")
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            if (!isTestingWebhook) {
+                                isTestingWebhook = true
+                                viewModel.testWebhook { result ->
+                                    webhookTestResult = result
+                                    isTestingWebhook = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isTestingWebhook
+                    ) {
+                        if (isTestingWebhook) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Testing…")
+                        } else {
+                            Text("🧪 Test Webhook (dry-run)")
+                        }
+                    }
+                    Text(
+                        "Sends one fake test payment to the server to verify auth → parsing → auto-match. Nothing is saved and no real order is touched.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
