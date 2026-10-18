@@ -19,11 +19,18 @@ object SmsParser {
         val fee: String? = null
     )
 
-    fun parseMessage(sender: String, body: String): ParsedMfsData? {
+    /**
+     * @param forcedMfsName when non-null, skips provider auto-detection and uses
+     * this provider name directly. Used when the sender matches an enabled
+     * provider's user-configured sender filter (e.g. a bank shortcode like
+     * "PUBALI_BANK" for Bangla QR settlements) — the filter is authoritative,
+     * so switching banks/QR providers only needs a Settings change.
+     */
+    fun parseMessage(sender: String, body: String, forcedMfsName: String? = null): ParsedMfsData? {
         // Normalize Bengali digits (০-৯) to English so amount/TrxID regexes work
         // on Bangla SMS text as well.
         val normalizedBody = normalizeDigits(body)
-        val mfsName = determineMfsName(sender, normalizedBody) ?: return null
+        val mfsName = forcedMfsName ?: determineMfsName(sender, normalizedBody) ?: return null
 
         val amount = extractAmount(normalizedBody)
         val trxId = extractTrxId(normalizedBody)
@@ -106,7 +113,9 @@ object SmsParser {
         val lowerBody = body.lowercase()
 
         // 1. Sender-level strict priority (Originating address is authoritative)
-        if (lowerSender.contains("banglaqr") || lowerSender.contains("bangla qr")) {
+        // TallyPay is a Bangla QR payment aggregator — its SMS come from
+        // "TallyPay" and mention "TallyPay QR payment" (no "Bangla QR" text).
+        if (lowerSender.contains("banglaqr") || lowerSender.contains("bangla qr") || lowerSender.contains("tallypay")) {
             return "BanglaQR"
         }
         if (lowerSender.contains("16216") || lowerSender.contains("rocket") || lowerSender.contains("dbbl") || lowerSender.contains("nexus")) {
@@ -127,7 +136,7 @@ object SmsParser {
         // payment settles to the merchant's bank/MFS account and the SMS
         // mentions "Bangla QR").
         return when {
-            lowerBody.contains("bangla qr") || lowerBody.contains("banglaqr") -> "BanglaQR"
+            lowerBody.contains("bangla qr") || lowerBody.contains("banglaqr") || lowerBody.contains("tallypay") -> "BanglaQR"
             lowerBody.contains("rocket") || lowerBody.contains("16216") || lowerBody.contains("dbbl") || lowerBody.contains("রকেট") -> "Rocket"
             lowerBody.contains("nagad") || lowerBody.contains("16167") || lowerBody.contains("নগদ") -> "Nagad"
             lowerBody.contains("upay") || lowerBody.contains("16268") || lowerBody.contains("উপায়") -> "Upay"

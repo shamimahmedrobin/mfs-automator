@@ -29,6 +29,29 @@ object SmsProcessor {
         val synced: Boolean = false
     )
 
+    /**
+     * Returns the provider name if the SMS sender matches the sender filter of
+     * an ENABLED provider, else null. Lets the owner point any provider (e.g.
+     * Bangla QR) at any sender — a bank shortcode like "PUBALI_BANK" or
+     * "BRAC BANK", a QR aggregator like "TallyPay" — without an app update.
+     */
+    private suspend fun findProviderBySenderFilter(
+        settings: com.example.data.SettingsRepository,
+        sender: String
+    ): String? {
+        val candidates = listOf(
+            "bKash" to (settings.bkashEnabled.first() to settings.senderFilter("bKash").first()),
+            "Nagad" to (settings.nagadEnabled.first() to settings.senderFilter("Nagad").first()),
+            "Rocket" to (settings.rocketEnabled.first() to settings.senderFilter("Rocket").first()),
+            "Upay" to (settings.upayEnabled.first() to settings.senderFilter("Upay").first()),
+            "BanglaQR" to (settings.banglaQrEnabled.first() to settings.senderFilter("BanglaQR").first())
+        )
+        return candidates.firstOrNull { (_, enabledAndFilter) ->
+            val (enabled, filter) = enabledAndFilter
+            enabled && filter.isNotBlank() && SmsParser.senderAllowed(sender, filter)
+        }?.first
+    }
+
     suspend fun processIncomingSms(
         context: Context,
         sender: String,
@@ -40,14 +63,23 @@ object SmsProcessor {
             Log.d(TAG, "Processing SMS - Sender: $sender, Body: $body")
         }
 
-        val parsedData = SmsParser.parseMessage(sender, body)
+        val settings = com.example.data.SettingsRepository(context)
+
+        // Provider detection priority: user-configured sender filters are
+        // authoritative. If an ENABLED provider has a non-empty sender filter
+        // matching this SMS sender (e.g. "PUBALI_BANK" or "BRAC BANK" for
+        // Bangla QR settlements), that provider is forced — so switching
+        // banks/QR providers later only needs a Settings change, no app update.
+        // Falls back to keyword auto-detection when no filter matches.
+        val forcedProvider = findProviderBySenderFilter(settings, sender)
+
+        val parsedData = SmsParser.parseMessage(sender, body, forcedProvider)
             ?: return ProcessResult(false, "Not a recognized MFS transaction SMS.")
 
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "Parsed MFS Data: $parsedData")
         }
 
-        val settings = com.example.data.SettingsRepository(context)
         val isBkashEnabled = settings.bkashEnabled.first()
         val isNagadEnabled = settings.nagadEnabled.first()
         val isRocketEnabled = settings.rocketEnabled.first()
