@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.mfsreader.kpwzyt"
     minSdk = 24
     targetSdk = 36
-    versionCode = 9
-    versionName = "3.3"
+    versionCode = 8
+    versionName = "3.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -88,6 +88,8 @@ dependencies {
   implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
+  // Force Fragment >= 1.3.0 (lint InvalidFragmentVersionForActivityResult)
+  implementation(libs.androidx.fragment)
   // implementation(libs.androidx.camera.camera2)
   // implementation(libs.androidx.camera.core)
   // implementation(libs.androidx.camera.lifecycle)
