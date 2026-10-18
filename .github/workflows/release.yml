@@ -24,10 +24,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # IMPORTANT: this project builds with JDK 21 + Gradle 9.3.1
+      # (see android.yml and the "upgrade Java to 21" commit).
+      # JDK 17 makes assembleRelease fail — keep this in sync with android.yml.
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
 
       - name: Bump version
         id: bump
