@@ -50,7 +50,8 @@ object SmsParser {
 
     /**
      * Detects whether the SMS is money coming IN (customer payment, cash in)
-     * or going OUT (cash out, send money, merchant payment).
+     * or going OUT (cash out, send money, mobile recharge, merchant payment,
+     * bill pay).
      *
      * Outgoing cues are checked first because they are more specific:
      * an incoming "received payment of Tk 500 from ..." must not match the
@@ -58,8 +59,12 @@ object SmsParser {
      */
     fun detectDirection(body: String): String {
         val lower = body.lowercase()
-        if (lower.contains("cash out") || lower.contains("cashout")) return "out"
+        if (lower.contains("cash out") || lower.contains("cashout") || lower.contains("ক্যাশ আউট")) return "out"
         if (lower.contains("send money")) return "out"
+        // Mobile recharge: money leaves the wallet to top up a phone.
+        if (lower.contains("recharge") || lower.contains("রিচার্জ")) return "out"
+        // Bill payments (electricity, gas, internet, ...).
+        if (lower.contains("pay bill") || lower.contains("bill pay")) return "out"
         if (Regex("\\bpayment\\b.{0,40}\\bto\\b").containsMatchIn(lower)) return "out"
         if (Regex("\\bsent\\b.{0,20}tk").containsMatchIn(lower)) return "out"
         // Default: incoming (previous behavior) — safest for payment matching.
