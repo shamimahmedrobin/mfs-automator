@@ -26,7 +26,12 @@ else:
     if not v2:
         sys.exit("versionName not found")
     major, minor = map(int, v2.groups())
-    new = f"{major}.{minor + 1}"
+    minor += 1
+    if minor >= 10:
+        # Roll over: 2.9 -> 3.0 (never 2.10)
+        major += 1
+        minor = 0
+    new = f"{major}.{minor}"
 s = s.replace(v.group(0) if v else v2.group(0), f'versionName = "{new}"', 1)
 
 with open(PATH, "w") as f:
