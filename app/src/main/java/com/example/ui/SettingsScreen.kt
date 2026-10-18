@@ -31,7 +31,11 @@ import android.net.Uri
 import android.os.PowerManager
 import android.widget.Toast
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +77,8 @@ fun SettingsScreen(
     
     val deviceId by viewModel.settings.deviceId.collectAsState(initial = "")
     val minAmount by viewModel.settings.minAmount.collectAsState(initial = "0")
+    var isMinAmountEditable by remember { mutableStateOf(false) }
+    var tempMinAmount by remember(minAmount) { mutableStateOf(minAmount) }
     val customHeader by viewModel.settings.customHeader.collectAsState(initial = "")
 
     var showClearDialog by remember { mutableStateOf(false) }
@@ -88,6 +94,8 @@ fun SettingsScreen(
     
     var isApiSectionEditable by remember { mutableStateOf(false) }
     var tempAppTitle by remember(appTitle) { mutableStateOf(appTitle) }
+    var isGeneralEditable by remember { mutableStateOf(false) }
+    var webhookSecretVisible by remember { mutableStateOf(false) }
     var tempWebhookUrl by remember(webhookUrl) { mutableStateOf(webhookUrl) }
     var tempApiToken by remember(apiToken) { mutableStateOf(apiToken) }
     var tempWebhookSecret by remember(webhookSecret) { mutableStateOf(webhookSecret) }
@@ -210,9 +218,10 @@ fun SettingsScreen(
                 SettingsSectionTitle("GENERAL")
                 SettingsCard {
                     OutlinedTextField(
-                        value = tempAppTitle,
-                        onValueChange = { tempAppTitle = it; coroutineScope.launch { viewModel.settings.saveAppTitle(it) } },
+                        value = if (isGeneralEditable) tempAppTitle else appTitle,
+                        onValueChange = { tempAppTitle = it },
                         label = { Text("App Title") },
+                        readOnly = !isGeneralEditable,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -220,6 +229,42 @@ fun SettingsScreen(
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface
                         )
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (!isGeneralEditable) {
+                        Button(
+                            onClick = { tempAppTitle = appTitle; isGeneralEditable = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Text("Edit")
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { tempAppTitle = appTitle; isGeneralEditable = false },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancel")
+                            }
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        viewModel.settings.saveAppTitle(tempAppTitle)
+                                        isGeneralEditable = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Save")
+                            }
+                        }
+                    }
                 }
             }
             
@@ -260,6 +305,15 @@ fun SettingsScreen(
                         readOnly = !isApiSectionEditable,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        visualTransformation = if (webhookSecretVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { webhookSecretVisible = !webhookSecretVisible }) {
+                                Icon(
+                                    imageVector = if (webhookSecretVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                    contentDescription = if (webhookSecretVisible) "Hide secret" else "Show secret"
+                                )
+                            }
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.surface,
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface
@@ -504,9 +558,10 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
-                        value = minAmount,
-                        onValueChange = { coroutineScope.launch { viewModel.settings.saveMinAmount(it) } },
+                        value = if (isMinAmountEditable) tempMinAmount else minAmount,
+                        onValueChange = { tempMinAmount = it },
                         label = { Text("Minimum Amount Filter (৳)") },
+                        readOnly = !isMinAmountEditable,
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -515,6 +570,38 @@ fun SettingsScreen(
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface
                         )
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (!isMinAmountEditable) {
+                        OutlinedButton(
+                            onClick = { tempMinAmount = minAmount; isMinAmountEditable = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Edit")
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { tempMinAmount = minAmount; isMinAmountEditable = false },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancel")
+                            }
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        viewModel.settings.saveMinAmount(tempMinAmount)
+                                        isMinAmountEditable = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Save")
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "If the balance check keeps flagging legit payments (e.g. after using the account from another phone), reset the baseline: the next transaction will be trusted once and its balance becomes the new reference.",
@@ -846,12 +933,18 @@ fun ProviderListenerRow(
     onSenderFilterChange: (String) -> Unit,
     filterHint: String
 ) {
+    // Local edit state: typing uses local tempFilter (no DataStore round-trip),
+    // which also fixes the cursor jumping to the start while typing.
+    var isEditing by remember { mutableStateOf(false) }
+    var tempFilter by remember(senderFilter) { mutableStateOf(senderFilter) }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         ProviderToggle(name = name, checked = checked, onCheckedChange = onCheckedChange)
         if (checked) {
             OutlinedTextField(
-                value = senderFilter,
-                onValueChange = onSenderFilterChange,
+                value = if (isEditing) tempFilter else senderFilter,
+                onValueChange = { tempFilter = it },
+                readOnly = !isEditing,
                 label = { Text("Sender filter (optional)") },
                 placeholder = { Text(filterHint) },
                 modifier = Modifier.fillMaxWidth(),
@@ -861,6 +954,33 @@ fun ProviderListenerRow(
                     unfocusedContainerColor = MaterialTheme.colorScheme.surface
                 )
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (!isEditing) {
+                OutlinedButton(
+                    onClick = { tempFilter = senderFilter; isEditing = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Edit")
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { tempFilter = senderFilter; isEditing = false },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = { onSenderFilterChange(tempFilter); isEditing = false },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Save")
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
