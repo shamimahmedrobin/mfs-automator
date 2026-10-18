@@ -780,6 +780,7 @@ fun formatTxDateTime(timestamp: Long): String {
 
 @Composable
 fun TransactionItem(transaction: PaymentTransaction, onRetryClick: ((PaymentTransaction) -> Unit)? = null) {
+    var showDetail by remember { mutableStateOf(false) }
     val mfsColor = when (transaction.mfsName) {
         "bKash" -> com.example.ui.theme.MfsBkash
         "Nagad" -> com.example.ui.theme.MfsNagad
@@ -793,7 +794,8 @@ fun TransactionItem(transaction: PaymentTransaction, onRetryClick: ((PaymentTran
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("transaction_item_${transaction.id}"),
+            .testTag("transaction_item_${transaction.id}")
+            .clickable { showDetail = true },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -963,6 +965,13 @@ fun TransactionItem(transaction: PaymentTransaction, onRetryClick: ((PaymentTran
                 }
             }
         }
+    }
+
+    if (showDetail) {
+        com.example.ui.TransactionDetailDialog(
+            transaction = transaction,
+            onDismiss = { showDetail = false }
+        )
     }
 }
 
